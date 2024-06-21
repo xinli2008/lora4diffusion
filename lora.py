@@ -1,22 +1,8 @@
-# lora4diffusion
+import torch
+import torch.nn as nn
+from config import *
 
-## Introduction
-
-从0到1手写基于mnist手写数字数据集的 lora for stable diffusion模型复现
-
-## Preliminary
-- **扩散模型的训练与采样过程**
-
-![diffusion process](./assets/diffusion.png)
-
-## Architecture
-
-![lora architecture](./assets/lora1.png)
-
-## code
-
-```python
-    class LoraLinearLayer(nn.Module):
+class LoraLinearLayer(nn.Module):
     r"""
     A linear layer that is used with LORA
     Args:
@@ -60,18 +46,23 @@
             up_hidden_states *= self.alpha / self.rank
         
         return up_hidden_states.to(original_dtype)
-```
+    
+def inject_lora(model,name,layer):
+    r"""
+    Perform lora injection
+    Args:
+        i.e. model is unet, name is dec_convs.2.cross_attn.w_q
+        and lora layer is Linear(in_features=64, out_features=32, bias=True)
+    """
+    name_cols=name.split('.')
 
-## Result
-
-- **采样图片**
-
-- **loss**
-
-
-## Acknowledgements
-
-- [Pytorch-diffusion](https://github.com/owenliang/pytorch-diffusion)
-- [Stable Diffusion 原理介绍与源码分析](https://blog.csdn.net/Eric_1993/article/details/129600524?spm=1001.2014.3001.5501)
-- [扩散模型(Diffusion Model)详解：直观理解、数学原理、PyTorch 实现](https://zhouyifan.net/2023/07/07/20230330-diffusion-model/)
-
+    # 逐层下探到linear归属的module
+    children=name_cols[:-1]
+    cur_layer=model 
+    # 这里找到倒数第二层, 比如说是cross_attention
+    for child in children:
+        cur_layer=getattr(cur_layer,child)
+    
+    lora_layer=LoraLinearLayer(rank, alpha, layer.in_features, layer.out_features)
+    # 比如说将cross_attention的w_q设置为lora_linear layer
+    setattr(cur_layer, name_cols[-1],lora_layer)
