@@ -12,9 +12,8 @@ class LoraLinearLayer(nn.Module):
         out_features: number of output features.
         dtype: the device to use for the layer's weights.
         device: the dtyle to use for the layer's weights.
-
     """
-    def __init__(self, rank, alpha, in_features, out_features):
+    def __init__(self, raw_layer, rank, alpha, in_features, out_features):
         super(LoraLinearLayer, self).__init__()
 
         self.down = nn.Linear(in_features, rank, bias = False)
@@ -27,14 +26,16 @@ class LoraLinearLayer(nn.Module):
         
         nn.init.normal_(self.down.weight, std = 1 / self.rank)
         nn.init.zeros_(self.up.weight)
+    
+        self.raw_layer = raw_layer
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         r"""
         Perform lora forward process
         Args:
-            hidden_states:
+            hidden_states:  [B, L, C]
         Return:
-            torch.Tensor:   
+            torch.Tensor:   [B, L, C]
         """
         original_dtype = hidden_states.dtype
         dtype = self.down.weight.dtype
@@ -45,7 +46,10 @@ class LoraLinearLayer(nn.Module):
         if self.alpha:
             up_hidden_states *= self.alpha / self.rank
         
-        return up_hidden_states.to(original_dtype)
+        raw_output = self.raw_layer(hidden_states).to(original_dtype)
+        final_out = raw_output + up_hidden_states.to(hidden_states)
+
+        return final_out.to(original_dtype)
     
 def inject_lora(model,name,layer):
     r"""
@@ -63,6 +67,6 @@ def inject_lora(model,name,layer):
     for child in children:
         cur_layer=getattr(cur_layer,child)
     
-    lora_layer=LoraLinearLayer(rank, alpha, layer.in_features, layer.out_features)
+    lora_layer=LoraLinearLayer(layer, rank, alpha, layer.in_features, layer.out_features)
     # 比如说将cross_attention的w_q设置为lora_linear layer
-    setattr(cur_layer, name_cols[-1],lora_layer)
+    setattr(cur_layer, name_cols[-1], lora_layer)

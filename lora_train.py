@@ -113,7 +113,7 @@ if __name__ == "__main__":
             lora_state={}
             for name,param in model.named_parameters():
                 name_cols=name.split('.')
-                filter_names=['lora_a','lora_b']
+                filter_names=['down','up']
                 if any(n==name_cols[-1] for n in filter_names):
                     lora_state[name]=param
             torch.save(lora_state, model_save_path)
